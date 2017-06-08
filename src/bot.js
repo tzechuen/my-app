@@ -9,98 +9,187 @@ let bot = new Bot()
 bot.onEvent = function(session, message) {
   switch (message.type) {
     case 'Init':
-      welcome(session)
-      break
+    welcome(session)
+    break
     case 'Message':
-      onMessage(session, message)
-      break
+    onMessage(session, message)
+    break
     case 'Command':
-      onCommand(session, message)
-      break
+    onCommand(session, message)
+    break
     case 'Payment':
-      onPayment(session, message)
-      break
+    onPayment(session, message)
+    break
     case 'PaymentRequest':
-      welcome(session)
-      break
+    welcome(session)
+    break
   }
 }
 
+
+bot.hear('reset', (session, message) => {
+  session.reset()
+  session.reply(SOFA.Message({body: "I've reset your state."}));
+})
+
 function onMessage(session, message) {
-  welcome(session)
+
+
+let address = session.address;
+let user = session.user;
+
+
+console.log('onMessage from ' + address);
+console.log('user: ' + JSON.stringify(user));
+
+let body = message.content.body.toLowerCase();
+
+console.log('Body: ' + body);
+
+let step = session.get('step');
+
+if (step) {
+  switch (step) {
+
+    case 'howmuch':
+    processHowMuch(session, message);
+    break
+
+    case 'currency':
+    processCurrency(session, message);
+    break
+
+    case 'location':
+    processLocation(session, message);
+    break
+
+
+  }
+
+} else if (body.includes('hi') || body.includes('hello')) {
+  welcome(session);
 }
+
+}
+
 
 function onCommand(session, command) {
   switch (command.content.value) {
-    case 'ping':
-      pong(session)
-      break
-    case 'count':
-      count(session)
-      break
-    case 'donate':
-      donate(session)
-      break
-    }
+
+    case 'ethForCash':
+    console.log('Selected Eth For Cash');
+    askHowMuch(session);
+    break
+
+    case 'cashForEth':
+    console.log('Selected Cash For Eth');
+    askHowMuch(session);
+    break
+
+  }
+
 }
 
-function onPayment(session, message) {
-  if (message.fromAddress == session.config.paymentAddress) {
-    // handle payments sent by the bot
-    if (message.status == 'confirmed') {
-      // perform special action once the payment has been confirmed
-      // on the network
-    } else if (message.status == 'error') {
-      // oops, something went wrong with a payment we tried to send!
-    }
+function askHowMuch(session) {
+
+  session.set('step', 'howmuch');
+
+  console.log('step set: ' + session.get('step'));
+
+  session.reply(SOFA.Message({body: "How much ETH are you looking to trade?"}));
+
+
+
+}
+
+function processHowMuch(session, message) {
+
+  let inputHowMuch = parseFloat(message.content.body);
+
+console.log('inputHowMuch: ' + inputHowMuch);
+
+  if (inputHowMuch > 0) {
+    session.set('howmuch', 'inputHowMuch');
+    session.set('step', 'currency');
+
+     session.reply(SOFA.Message({body: "What is your currency? (i.e. USD, AUD, SGD)"}))
+
   } else {
-    // handle payments sent to the bot
-    if (message.status == 'unconfirmed') {
-      // payment has been sent to the ethereum network, but is not yet confirmed
-      sendMessage(session, `Thanks for the payment! 🙏`);
-    } else if (message.status == 'confirmed') {
-      // handle when the payment is actually confirmed!
-    } else if (message.status == 'error') {
-      sendMessage(session, `There was an error with your payment!🚫`);
-    }
+    session.reply(SOFA.Message({body: "Please specify a valid ETH value (i.e. 1.5)"}))
   }
 }
 
-// STATES
+function processCurrency(session, message)  {
+
+  let inputCurrency = message.content.body.toUpperCase();
+  console.log('inputCurrency: ' + inputCurrency);
+
+  Fiat.fetch().then((toEth) => {
+    let exchangeRate = Fiat.rates[inputCurrency];
+
+console.log('exchangeRate: ' + exchangeRate);
+
+    if (exchangeRate) {
+      console.log('exchangeRate: ' + exchangeRate);
+
+session.set('currency', inputCurrency);
+session.set('step', 'location');
+session.reply(SOFA.Message({body: "Where do you want to perform this transaction? Please specify your region and country separated by a comma (i.e. Sydney, Australia)"}))
+
+
+    } else {
+      console.log('no exchangeRate for this currency!')
+
+session.reply(SOFA.Message({body: "Please specify a valid currency (i.e. USD, AUD, SGD)"}))
+
+    }
+
+  })
+
+}
+
+
+function processLocation(session, message) {
+
+    let inputLocation = message.content.body;
+
+    let separatedArray = inputLocation.split(',');
+
+    if (separatedArray.length == 2) {
+
+        let region = separatedArray[0].trim();
+        let country = separatedArray[1].trim();
+
+        console.log('region: ' + region);
+        console.log('country: ' + country);
+
+session.set('region', region);
+session.set('country', country);
+
+session.reply(SOFA.Message({body: 'Please provide some details so your trader knows how to perform the trade. (i.e. "Can we meet at Sydney Airport 5pm this Sunday? Please call me at 0433-000-111")'}))
+
+
+    } else {
+      session.reply(SOFA.Message({body: "Please specify your region and country separated by a comma (i.e. Sydney, Australia)"}))
+    }
+
+}
+
+
+
+
+
 
 function welcome(session) {
-  sendMessage(session, `Hello Token!`)
-}
 
-function pong(session) {
-  sendMessage(session, `Pong`)
-}
-
-// example of how to store state on each user
-function count(session) {
-  let count = (session.get('count') || 0) + 1
-  session.set('count', count)
-  sendMessage(session, `${count}`)
-}
-
-function donate(session) {
-  // request $1 USD at current exchange rates
-  Fiat.fetch().then((toEth) => {
-    session.requestEth(toEth.USD(1))
-  })
-}
-
-// HELPERS
-
-function sendMessage(session, message) {
   let controls = [
-    {type: 'button', label: 'Ping', value: 'ping'},
-    {type: 'button', label: 'Count', value: 'count'},
-    {type: 'button', label: 'Donate', value: 'donate'}
+    {type: 'button', label: 'I want to get ETH with cash', value: 'ethForCash'},
+    {type: 'button', label: 'I want to get cash for my ETHs', value: 'cashForEth'}
   ]
+
   session.reply(SOFA.Message({
-    body: message,
+    body: 'Hello there! Welcome to Eth2Cash. How can I help you today?',
     controls: controls,
-    showKeyboard: false,
+    showKeyboard: false
   }))
 }
