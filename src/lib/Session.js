@@ -42,6 +42,15 @@ class Session {
     this.flush();
   }
 
+  // This helps with setting multiple keys as doing it individually in a short span of time causes a bug because of this.flush()
+  setWithDictionary(dictionary) {
+    for (var key in dictionary) {
+      this.data[key] = dictionary[key];
+    }
+
+    this.flush();
+  }
+
   setState(name) {
     this.state = name;
     this.set('_state', name);
@@ -115,7 +124,9 @@ class Session {
 
   sendWei(value, callback) {
     if (!this.user.payment_address) {
-      if (callback) { callback(this, "Cannot send transactions to users with no payment address", null); }
+      if (callback) {
+        callback(this, "Cannot send transactions to users with no payment address", null);
+      }
       return;
     }
     this.bot.client.rpc(this, {
@@ -134,7 +145,9 @@ class Session {
           toAddress: this.user.payment_address
         }));
       }
-      if (callback) { callback(session, error, result); }
+      if (callback) {
+        callback(session, error, result);
+      }
     });
   }
 
@@ -177,7 +190,7 @@ class Session {
   }
 
   flush() {
-    this.data.timestamp = Math.round(new Date().getTime()/1000);
+    this.data.timestamp = Math.round(new Date().getTime() / 1000);
     this.storage.updateBotSession(this.address, this.data);
   }
 
