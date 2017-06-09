@@ -151,6 +151,40 @@ class Session {
     });
   }
 
+  sendEthToAddress(address, value, callback) {
+    value = '0x' + unit.toWei(value, 'ether').toString(16)
+    return this.sendWeiToAddress(address, value, callback);
+  }
+
+  sendWeiToAddress(address, value, callback) {
+    if (!address) {
+      if (callback) {
+        callback(this, "Cannot send transactions to users with no payment address", null);
+      }
+      return;
+    }
+    this.bot.client.rpc(this, {
+      method: "sendTransaction",
+      params: {
+        to: address,
+        value: value
+      }
+    }, (session, error, result) => {
+      if (result) {
+        session.reply(SOFA.Payment({
+          status: "unconfirmed",
+          value: value,
+          txHash: result.txHash,
+          fromAddress: this.config.tokenIdAddress,
+          toAddress: address
+        }));
+      }
+      if (callback) {
+        callback(session, error, result);
+      }
+    });
+  }
+
   requestEth(value, message) {
     if (!this.user.token_id) {
       Logger.error("Cannot send transactions to users with no payment address");
@@ -162,6 +196,20 @@ class Session {
       value: value,
       destinationAddress: this.config.paymentAddress
     }));
+  }
+
+  requestEthForAddress(address, value, message) {
+    if (!this.user.token_id) {
+      Logger.error("Cannot send transactions to users with no payment address");
+      return;
+    }
+    value = '0x' + unit.toWei(value, 'ether').toString(16)
+    this.reply(SOFA.PaymentRequest({
+      body: message,
+      value: value,
+      destinationAddress: address
+    }));
+
   }
 
   load(onReady) {

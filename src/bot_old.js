@@ -29,17 +29,17 @@ bot.onEvent = function(session, message) {
 function onMessage(session, message) {
 
 
-    //if it contains the word ethlogo, send an image message
-    if (message.content.body.includes('ethlogo')) {
-      session.reply(SOFA.Message({
-        body: "Here is your logo",
-        attachments: [{
-          "type": "image",
-          "url": "ethereum.jpg"
-        }]
-      }))
-      return
-    }
+  //if it contains the word ethlogo, send an image message
+  if (message.content.body.includes('ethlogo')) {
+    session.reply(SOFA.Message({
+      body: "Here is your logo",
+      attachments: [{
+        "type": "image",
+        "url": "ethereum.jpg"
+      }]
+    }))
+    return
+  }
 
   welcome(session)
 }
@@ -55,7 +55,7 @@ function onCommand(session, command) {
     case 'donate':
       donate(session)
       break
-    }
+  }
 }
 
 function onPayment(session, message) {
@@ -107,10 +107,21 @@ function donate(session) {
 // HELPERS
 
 function sendMessage(session, message) {
-  let controls = [
-    {type: 'button', label: 'Ping', value: 'ping'},
-    {type: 'button', label: 'Count', value: 'count'},
-    {type: 'button', label: 'Donate', value: 'donate'}
+  let controls = [{
+      type: 'button',
+      label: 'Ping',
+      value: 'ping'
+    },
+    {
+      type: 'button',
+      label: 'Count',
+      value: 'count'
+    },
+    {
+      type: 'button',
+      label: 'Donate',
+      value: 'donate'
+    }
   ]
   session.reply(SOFA.Message({
     body: message,

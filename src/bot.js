@@ -190,7 +190,33 @@ function onCommand(session, command) {
 
       break
 
+    case 'send_eth':
+      sendEth(session);
+      break
+    case 'abort_trade':
+
+      // TODO: Update trade in backend
+      session.reset();
+      welcome(session);
+      break
+
   }
+
+}
+
+function sendEth(session) {
+
+  // Request eth for the trader first
+  let ethAmount = session.get('ethAmount');
+  let addressToPay = session.get('addressToPay');
+
+  session.requestEthForAddress(addressToPay, ethAmount, 'Please send me the ETH for this trade so I can send it to your trader!');
+
+}
+
+function onPayment(session, message) {
+
+  console.log('onPayment');
 
 }
 
@@ -199,6 +225,85 @@ function acceptedIncomingTrade(session) {
 
   let user = session.user;
   console.log('User: ' + JSON.stringify(user));
+
+  Api.findTrade(user.token_id, (success, trade) => {
+
+    if (success) {
+      console.log('Found trade: ' + JSON.stringify(trade));
+
+
+      if (trade.type == 'sell') { // Sell ETH
+
+        session.setWithDictionary({
+          addressToPay: trade.tradeePaymentAddress,
+          ethAmount: trade.ethAmount
+        })
+
+        let controls = [{
+          type: 'button',
+          label: 'Confirm received cash and Send ETH',
+          value: 'send_eth'
+        }, {
+          type: 'button',
+          label: 'Abort trade',
+          value: 'abort_trade'
+        }]
+
+        session.reply(SOFA.Message({
+          body: `Brilliant! Once you have received your cash, please confirm so you can send them the ETHs`,
+          controls: controls,
+          showKeyboard: false
+        }))
+
+
+      } else { // Buy ETH
+
+        let tradeeUsername = trade.tradeeUsername;
+        let tradeeAddress = trade.tradeeTokenAddress;
+
+        let controls = [{
+          type: 'button',
+          label: 'Abort trade',
+          value: 'abort_trade'
+        }]
+
+        session.reply(SOFA.Message({
+          body: `Bravo! Once you have sent cash to ${tradeeUsername}, you will receive your ETHs!`,
+          controls: controls,
+          showKeyboard: false
+        }))
+
+        // Make tradee send ETH
+        let tradeeControls = [{
+            type: 'button',
+            label: 'Send ETH',
+            value: 'send_eth'
+          },
+          {
+            type: 'button',
+            label: 'Abort trade',
+            value: 'abort_trade'
+          }
+        ]
+
+        bot.client.send(tradeeAddress, SOFA.Message({
+          body: `Yay! The trader has accepted to trade with you! Please send your ETHs once you are ready.`,
+          controls: tradeeControls,
+          showKeyboard: false
+        }));
+
+
+      }
+
+
+
+
+
+    } else {
+      console.log('error finding trade');
+    }
+
+  });
 }
 
 function rejectedIncomingTrade(session) {
@@ -243,30 +348,76 @@ function searchForTraderWithApi(session) {
           body: `We have found a potential trader! Please wait while we contact them...`,
         }))
 
-        // Send message to potential trader
-        let controls = [{
-            type: 'button',
-            label: 'Accept',
-            value: 'incoming_accept_trade'
-          },
-          {
-            type: 'button',
-            label: 'Reject',
-            value: 'incoming_reject_trade'
+        // Add new trade to backend to save both trader and tradee info
+        let myTokenAddress = user.token_id;
+        let myPaymentAddress = user.payment_address;
+        let myUsername = user.username;
+
+        let traderTokenAddress = trader.tokenAddress;
+        let traderPaymentAddress = trader.paymentAddress;
+        let traderUsername = trader.username;
+
+        let ethAmount = session.get('howmuch');
+        let details = session.get('details');
+
+
+        console.log('myTokenAddress: ' + myTokenAddress);
+        console.log('myPaymentAddress: ' + myPaymentAddress);
+        console.log('myUsername: ' + myUsername);
+        console.log('traderTokenAddress: ' + traderTokenAddress);
+        console.log('traderPaymentAddress: ' + traderPaymentAddress);
+        console.log('traderUsername: ' + traderUsername);
+        console.log('ethAmount: ' + ethAmount);
+        console.log('currency: ' + currency);
+        console.log('region: ' + region);
+        console.log('country: ' + country);
+        console.log('details: ' + details);
+        console.log('type: ' + type);
+
+        console.log('Before submitNewTrade');
+
+
+        Api.submitNewTrade(myTokenAddress, myPaymentAddress, myUsername, traderTokenAddress, traderPaymentAddress, traderUsername, ethAmount, currency, region, country, details, type, function(success) {
+
+          if (success) {
+            console.log('Submit new trade success');
+
+            if (type == 'buy') { // I am selling ETH, store address and amount
+              session.setWithDictionary({
+                addressToPay: traderPaymentAddress,
+                ethAmount: ethAmount
+              })
+            }
+
+            // Send message to potential trader
+            let controls = [{
+                type: 'button',
+                label: 'Accept',
+                value: 'incoming_accept_trade'
+              },
+              {
+                type: 'button',
+                label: 'Reject',
+                value: 'incoming_reject_trade'
+              }
+            ]
+
+            let traderAddress = trader.tokenAddress;
+
+            console.log('TraderAddress: ' + traderAddress);
+            console.log('Bot Client: ' + bot.client);
+            bot.client.send(traderAddress, SOFA.Message({
+              body: 'Placeholder message',
+              controls: controls,
+              showKeyboard: false
+            }));
+
+          } else {
+
+            console.log('Submit new trade error');
+
           }
-        ]
-
-        let traderAddress = trader.tokenAddress;
-
-        console.log('TraderAddress: ' + traderAddress);
-        console.log('Bot Client: ' + bot.client);
-        bot.client.send(traderAddress, SOFA.Message({
-          body: 'Placeholder message',
-          controls: controls,
-          showKeyboard: false
-        }));
-
-
+        });
 
       } else {
 
