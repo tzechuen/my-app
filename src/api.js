@@ -4,7 +4,6 @@ const Logger = require('./lib/Logger');
 
 function signUpAsTrader(tokenAddress, paymentAddress, username, currency, region, country, type, callback) {
 
-
   let body = {
     tokenAddress: tokenAddress,
     paymentAddress: paymentAddress,
@@ -77,6 +76,7 @@ function searchForTrader(myAddress, region, country, currency, type, callback) {
 
 }
 
+// Callback(success, trade)
 function submitNewTrade(myTokenAddress, myPaymentAddress, myUsername, traderTokenAddress, traderPaymentAddress, traderUsername, ethAmount, currency, region, country, details, type, callback) {
 
   let body = {
@@ -109,7 +109,7 @@ function submitNewTrade(myTokenAddress, myPaymentAddress, myUsername, traderToke
 
       console.log('new trade success:' + parsedBody);
 
-      callback(true);
+      callback(true, parsedBody);
 
     })
     .catch(function(err) {
@@ -148,10 +148,60 @@ function findTrade(traderTokenAddress, callback) {
 
 }
 
+function completeTrade(tradeId, callback) {
+
+  var options = {
+    method: 'POST',
+    uri: baseUrl + 'trades/' + tradeId + '/complete',
+    json: true // Automatically parses the JSON string in the response
+  };
+
+  console.log('Complete trade options: ' + JSON.stringify(options));
+
+  rp(options)
+    .then(function(parsedBody) {
+      // POST succeeded...
+
+      console.log('complete trade success:' + parsedBody);
+
+      callback(true);
+
+    })
+    .catch(function(err) {
+      // POST failed...
+      console.log('complete trade failed: ' + err);
+
+      callback(false);
+
+    });
+
+
+}
+
+function cancelTrade(tradeId, callback) {
+  var options = {
+    method: 'DELETE',
+    uri: baseUrl + 'trades/' + tradeId
+  };
+
+  rp(options)
+    .then(function(response) {
+      callback(true);
+    })
+    .catch(function(err) {
+      // Delete failed...
+
+      callback(false);
+    });
+
+}
+
 // REMINDER!!!! To add the new functions into this #JSnoob
 module.exports = {
   signUpAsTrader: signUpAsTrader,
   searchForTrader: searchForTrader,
   submitNewTrade: submitNewTrade,
-  findTrade: findTrade
+  findTrade: findTrade,
+  completeTrade: completeTrade,
+  cancelTrade: cancelTrade
 };

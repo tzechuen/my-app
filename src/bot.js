@@ -51,7 +51,7 @@ function welcome(session) {
   ]
 
   session.reply(SOFA.Message({
-    body: 'Hello there! Welcome to Eth2Cash. How can I help you today?',
+    body: 'Hello there! Welcome to Eth2Cash, your friendly ETH to Cash exchange bot!\n\nHow can I help you today?',
     controls: controls,
     showKeyboard: false
   }))
@@ -194,13 +194,49 @@ function onCommand(session, command) {
       sendEth(session);
       break
     case 'abort_trade':
-
-      // TODO: Update trade in backend
-      session.reset();
-      welcome(session);
+      abortTrade(session);
       break
 
   }
+
+}
+
+function abortTrade(session, callback) {
+
+
+  let tradeId = session.get('tradeId');
+
+  Api.cancelTrade(tradeId, (success) => {
+
+    if (callback) {
+      session.reset();
+      welcome(session);
+
+      callback(success);
+    }
+
+
+  });
+
+}
+
+function completeTrade(session) {
+
+  session.reply(SOFA.Message({
+    body: `Cha-ching. Thank you for using Eth2Cash! :)`,
+    showKeyboard: false
+  }))
+
+  let tradeId = session.get('tradeId');
+
+  console.log('Complete trade with tradeId ' + tradeId);
+
+  Api.completeTrade(tradeId, (success) => {
+
+    session.reset();
+    weclome(session);
+
+  });
 
 }
 
@@ -211,6 +247,10 @@ function sendEth(session) {
   let addressToPay = session.get('addressToPay');
 
   session.requestEthForAddress(addressToPay, ethAmount, 'Please send me the ETH for this trade so I can send it to your trader!');
+
+
+  // TODO: Need to figure out a better way to detect completion
+  completeTrade(session);
 
 }
 
@@ -231,6 +271,7 @@ function acceptedIncomingTrade(session) {
     if (success) {
       console.log('Found trade: ' + JSON.stringify(trade));
 
+      session.set('tradeId', trade.id);
 
       if (trade.type == 'sell') { // Sell ETH
 
@@ -296,9 +337,6 @@ function acceptedIncomingTrade(session) {
       }
 
 
-
-
-
     } else {
       console.log('error finding trade');
     }
@@ -311,6 +349,15 @@ function rejectedIncomingTrade(session) {
 
   let user = session.user;
   console.log('User: ' + JSON.stringify(user));
+
+  abortTrade(session, success => {
+
+    if (success) {
+      // TODO: Notify the trader
+
+    }
+
+  });
 }
 
 function searchForTraderWithApi(session) {
@@ -377,10 +424,13 @@ function searchForTraderWithApi(session) {
         console.log('Before submitNewTrade');
 
 
-        Api.submitNewTrade(myTokenAddress, myPaymentAddress, myUsername, traderTokenAddress, traderPaymentAddress, traderUsername, ethAmount, currency, region, country, details, type, function(success) {
+        Api.submitNewTrade(myTokenAddress, myPaymentAddress, myUsername, traderTokenAddress, traderPaymentAddress, traderUsername, ethAmount, currency, region, country, details, type, function(success, trade) {
 
           if (success) {
             console.log('Submit new trade success');
+            console.log('Trade: ' + JSON.stringify(trade));
+
+            session.set('tradeId', trade.id);
 
             if (type == 'buy') { // I am selling ETH, store address and amount
               session.setWithDictionary({
@@ -402,15 +452,35 @@ function searchForTraderWithApi(session) {
               }
             ]
 
-            let traderAddress = trader.tokenAddress;
 
-            console.log('TraderAddress: ' + traderAddress);
-            console.log('Bot Client: ' + bot.client);
-            bot.client.send(traderAddress, SOFA.Message({
-              body: 'Placeholder message',
-              controls: controls,
-              showKeyboard: false
-            }));
+            Fiat.fetch().then((toEth) => {
+              let exchangeRate = Fiat.rates[currency];
+
+              let amountInFiat = exchangeRate * ethAmount;
+              let amountInFiatString = `~${amountInFiat} ${currency}`;
+
+              let traderAddress = trader.tokenAddress;
+              let body = '';
+              let bodyDetails = `\n\nUsername: ${traderUsername}\nAmount: ${ethAmount} ETHs (${amountInFiatString})\nDetails: ${details}`;
+
+              if (type == 'buy') { // I am selling ETH
+                body = `Yay! We found someone who is willing to sell you some ETHs:${bodyDetails}`
+              } else {
+                body = `Yay! We found someone who wants to buy some ETHs:${bodyDetails}`
+              }
+
+              console.log('TraderAddress: ' + traderAddress);
+              console.log('Bot Client: ' + bot.client);
+              bot.client.send(traderAddress, SOFA.Message({
+                body: body,
+                controls: controls,
+                showKeyboard: false
+              }));
+
+
+            });
+
+
 
           } else {
 
