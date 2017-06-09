@@ -43,19 +43,37 @@ function signUpAsTrader(tokenAddress, paymentAddress, username, currency, region
 
 }
 
-function searchForTrader() {
+// Callback (success, trader)
+// Trader is null if unavailable
+function searchForTrader(myAddress, region, country, currency, type, callback) {
 
-  // var options = {
-  //   uri: 'https://api.github.com/user/repos',
-  //   qs: {
-  //     access_token: 'xxxxx xxxxx' // -> uri + '?access_token=xxxxx%20xxxxx'
-  //   },
-  //   headers: {
-  //     'User-Agent': 'Request-Promise'
-  //   },
-  //   json: true // Automatically parses the JSON string in the response
-  // };
+  let qs = {
+    myAddress: myAddress,
+    region: region,
+    country: country,
+    currency: currency,
+    type: type
+  };
 
+  console.log('qs: ' + JSON.stringify(qs));
+
+  var options = {
+    uri: baseUrl + 'traders/search',
+    qs: qs,
+    headers: {
+      'User-Agent': 'Request-Promise'
+    },
+    json: true // Automatically parses the JSON string in the response
+  };
+
+  rp(options)
+    .then(function(parsedBody) {
+      callback(true, parsedBody);
+    })
+    .catch(function(err) {
+      // API call failed...
+      callback(false);
+    });
 
 }
 

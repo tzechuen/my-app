@@ -136,6 +136,9 @@ function onCommand(session, command) {
 
     case 'confirmDetails':
       console.log('Confirmed Details');
+
+      searchForTraderWithApi(session);
+
       break
 
     case 'confirmListingDetails':
@@ -170,7 +173,128 @@ function onCommand(session, command) {
       welcome(session);
       break
 
+    case 'search_for_trader_try_again':
+      searchForTraderWithApi(session);
+
+      break
+
+    case 'incoming_accept_trade':
+
+      acceptedIncomingTrade(session);
+
+      break
+
+    case 'incoming_reject_trade':
+
+      rejectedIncomingTrade(session);
+
+      break
+
   }
+
+}
+
+function acceptedIncomingTrade(session) {
+  console.log('Accepted incoming trade');
+
+  let user = session.user;
+  console.log('User: ' + JSON.stringify(user));
+}
+
+function rejectedIncomingTrade(session) {
+  console.log('Rejected incoming trade');
+
+  let user = session.user;
+  console.log('User: ' + JSON.stringify(user));
+}
+
+function searchForTraderWithApi(session) {
+  console.log('searchForTraderWithApi');
+
+  session.reply(SOFA.Message({
+    body: `Hang tight! We're helping you find a trader...`,
+  }))
+
+  let user = session.user;
+
+  let myAddress = user.token_id;
+  let currency = session.get('currency');
+  let region = session.get('region');
+  let country = session.get('country');
+
+  // Type should be the opposite
+  let myType = session.get('type');
+  let type = '';
+
+  console.log('myType: ' + myType);
+
+  if (myType == 'buy') {
+    type = 'sell';
+  } else {
+    type = 'buy';
+  }
+
+  Api.searchForTrader(myAddress, region, country, currency, type, (success, trader) => {
+    if (success) {
+      if (trader) {
+        console.log('Found trader: ' + JSON.stringify(trader));
+
+        session.reply(SOFA.Message({
+          body: `We have found a potential trader! Please wait while we contact them...`,
+        }))
+
+        // Send message to potential trader
+        let controls = [{
+            type: 'button',
+            label: 'Accept',
+            value: 'incoming_accept_trade'
+          },
+          {
+            type: 'button',
+            label: 'Reject',
+            value: 'incoming_reject_trade'
+          }
+        ]
+
+        let traderAddress = trader.tokenAddress;
+
+        console.log('TraderAddress: ' + traderAddress);
+        console.log('Bot Client: ' + bot.client);
+        bot.client.send(traderAddress, SOFA.Message({
+          body: 'Placeholder message',
+          controls: controls,
+          showKeyboard: false
+        }));
+
+
+
+      } else {
+
+        let controls = [{
+            type: 'button',
+            label: 'Try Again',
+            value: 'search_for_trader_try_again'
+          },
+          {
+            type: 'button',
+            label: 'Abort',
+            value: 'search_for_trader_abort'
+          }
+        ]
+
+        session.reply(SOFA.Message({
+          body: `There doesn't seem to be a trader available in ${region}, ${country}. :(\n\nPlease try again later!`,
+          controls: controls,
+          showKeyboard: false
+        }))
+
+      }
+    } else {
+
+      console.log('Error searching for trader');
+
+    }
+  });
 
 }
 
@@ -349,11 +473,6 @@ function actuallyProcessCurrency(type, session, message) {
         });
 
       }
-
-      session.setWithDictionary({
-        'currency': inputCurrency,
-        'step': 'location_for_listing'
-      });
 
       session.reply(SOFA.Message({
         body: "Where do you want to perform this transaction? Please specify your region and country separated by a comma (i.e. Sydney, Australia)"
