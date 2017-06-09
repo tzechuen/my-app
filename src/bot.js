@@ -1,6 +1,7 @@
 const Bot = require('./lib/Bot')
 const SOFA = require('sofa-js')
 const Fiat = require('./lib/Fiat')
+const Api = require('./api');
 
 let bot = new Bot()
 
@@ -26,16 +27,44 @@ bot.onEvent = function(session, message) {
   }
 }
 
+//
+// bot.hear('reset', (session, message) => {
+//   session.reset()
+//   session.reply(SOFA.Message({
+//     body: "I've reset your state."
+//   }));
+// })
+//
 
-bot.hear('reset', (session, message) => {
-  session.reset()
+function welcome(session) {
+
+  let controls = [{
+      type: 'button',
+      label: 'I want to buy ETH using cash',
+      value: 'buyETH'
+    },
+    {
+      type: 'button',
+      label: 'I want to sell ETH for cash',
+      value: 'sellETH'
+    }
+  ]
+
   session.reply(SOFA.Message({
-    body: "I've reset your state."
-  }));
-})
+    body: 'Hello there! Welcome to Eth2Cash. How can I help you today?',
+    controls: controls,
+    showKeyboard: false
+  }))
+}
+
 
 function onMessage(session, message) {
 
+  if (message.content.body.toLowerCase() == 'reset') {
+    session.reset();
+    welcome(session);
+    return;
+  }
 
   let address = session.address;
   let user = session.user;
@@ -56,6 +85,10 @@ function onMessage(session, message) {
   if (step) {
     switch (step) {
 
+      case 'trading_or_signup':
+        askUserIfTradingOrSigningUp(session.get('type'), session); // Re-asks if user provided an invalid input
+        break
+
       case 'howmuch':
         processHowMuch(session, message);
         break
@@ -72,6 +105,14 @@ function onMessage(session, message) {
         processDetails(session, message);
         break
 
+      case 'currency_for_listing':
+        processCurrencyForListing(session, message);
+        break
+
+      case 'location_for_listing':
+        processListingLocation(session, message);
+        break
+
     }
 
   } else if (body.includes('hi') || body.includes('hello')) {
@@ -83,20 +124,25 @@ function onMessage(session, message) {
 
 function onCommand(session, command) {
 
-
-
   switch (command.content.value) {
 
-    case 'ethForCash':
-      askHowMuch(session);
+    case 'buyETH':
+      askUserIfTradingOrSigningUp('buy', session);
       break
 
-    case 'cashForEth':
-      askHowMuch(session);
+    case 'sellETH':
+      askUserIfTradingOrSigningUp('sell', session);
       break
 
     case 'confirmDetails':
       console.log('Confirmed Details');
+      break
+
+    case 'confirmListingDetails':
+      console.log('Confirmed Listing Details');
+
+      signUpAsTraderWithApi(session);
+
       break
 
     case 'startOver':
@@ -107,23 +153,136 @@ function onCommand(session, command) {
 
       break
 
+    case 'trade_now':
+      askHowMuch(session);
+      break
+
+    case 'list_as_trader':
+      askCurrencyForListing(session);
+      break
+
+    case 'sign_up_as_trader_try_again':
+      signUpAsTraderWithApi(session);
+      break
+
+    case 'sign_up_as_trader_abort':
+      session.reset();
+      welcome(session);
+      break
+
   }
 
 }
+
+
+function signUpAsTraderWithApi(session) {
+
+  let user = session.user;
+
+  console.log('signUpAsTraderWithApi user: ' + JSON.stringify(user));
+
+  let tokenAddress = user.token_id;
+  let paymentAddress = user.payment_address;
+  let username = user.username;
+
+  console.log('tokenAddress: ' + tokenAddress);
+  console.log('paymentAddress: ' + paymentAddress);
+
+  // currency, region, country, type
+  let currency = session.get('currency');
+  let region = session.get('region');
+  let country = session.get('country');
+  let type = session.get('type');
+
+  console.log('currency: ' + currency);
+  console.log('region: ' + region);
+  console.log('country: ' + country);
+  console.log('type: ' + type);
+
+  console.log('Before sign up as trader api call');
+
+  Api.signUpAsTrader(tokenAddress, paymentAddress, username, currency, region, country, type, function(success) {
+
+    if (success) {
+      session.set('step', null);
+
+      var message = '';
+
+      if (type == 'buy') {
+        message = "Awesome, we've signed you up as a trader.\n\nWe will notify you once we've found someone who can sell you ETH! :)";
+      } else {
+        message = "Awesome, we've signed you up as a trader. \n\nWe will notify you once we've found someone who wants to buy ETH! :)"
+      }
+
+      session.reply(SOFA.Message({
+        body: message
+      }))
+    } else {
+
+      let controls = [{
+          type: 'button',
+          label: 'Try Again',
+          value: 'sign_up_as_trader_try_again'
+        },
+        {
+          type: 'button',
+          label: 'Abort',
+          value: 'sign_up_as_trader_abort'
+        }
+      ]
+
+      session.reply(SOFA.Message({
+        body: 'Bugger! There appears to be an issue with our servers at the moment. :(',
+        controls: controls,
+        showKeyboard: false
+      }))
+
+    }
+
+  });
+
+}
+
+function askUserIfTradingOrSigningUp(type, session) {
+
+  console.log('askUserIfTradingOrSigningUp type: ' + type);
+
+  session.setWithDictionary({
+    'type': type,
+    'step': 'trading_or_signup'
+  });
+
+  let controls = [{
+      type: 'button',
+      label: 'I want to perform a trade now',
+      value: 'trade_now'
+    },
+    {
+      type: 'button',
+      label: 'I want to list myself as a trader',
+      value: 'list_as_trader'
+    }
+  ]
+
+  session.reply(SOFA.Message({
+    body: 'Sure thing! What do you want to do?',
+    controls: controls,
+    showKeyboard: false
+  }))
+
+}
+
 
 function askHowMuch(session) {
 
   session.set('step', 'howmuch');
 
-  console.log('step set: ' + session.get('step'));
-
   session.reply(SOFA.Message({
     body: "How much ETH are you looking to trade?"
   }));
 
-
-
 }
+
 
 function processHowMuch(session, message) {
 
@@ -151,7 +310,19 @@ function processHowMuch(session, message) {
   }
 }
 
-function processCurrency(session, message) {
+
+
+function askCurrencyForListing(session) {
+
+  session.set('step', 'currency_for_listing');
+
+  session.reply(SOFA.Message({
+    body: "What is your currency? (i.e. USD, AUD, SGD)"
+  }));
+
+};
+
+function actuallyProcessCurrency(type, session, message) {
 
   let inputCurrency = message.content.body.toUpperCase();
   console.log('inputCurrency: ' + inputCurrency);
@@ -162,20 +333,31 @@ function processCurrency(session, message) {
     if (exchangeRate) {
       console.log('exchangeRate: ' + exchangeRate);
 
-      // session.set('exchangeRate', exchangeRate);
-      // session.set('currency', inputCurrency);
-      // session.set('step', 'location');
+      if (type == 'trade') {
+
+        session.setWithDictionary({
+          'exchangeRate': exchangeRate,
+          'currency': inputCurrency,
+          'step': 'location'
+        });
+
+      } else if (type == 'listing') {
+
+        session.setWithDictionary({
+          'currency': inputCurrency,
+          'step': 'location_for_listing'
+        });
+
+      }
 
       session.setWithDictionary({
-        'exchangeRate': exchangeRate,
         'currency': inputCurrency,
-        'step': 'location'
+        'step': 'location_for_listing'
       });
 
       session.reply(SOFA.Message({
         body: "Where do you want to perform this transaction? Please specify your region and country separated by a comma (i.e. Sydney, Australia)"
       }))
-
 
     } else {
       console.log('no exchangeRate for this currency!')
@@ -188,10 +370,30 @@ function processCurrency(session, message) {
 
   })
 
+
+};
+
+function processCurrencyForListing(session, message) {
+  actuallyProcessCurrency('listing', session, message);
 }
 
+function processCurrency(session, message) {
+  actuallyProcessCurrency('trade', session, message);
+}
+
+function processListingLocation(session, message) {
+  actuallyProcessLocation('listing', session, message);
+}
 
 function processLocation(session, message) {
+
+  actuallyProcessLocation('trade', session, message);
+
+}
+
+function actuallyProcessLocation(type, session, message) {
+
+  console.log('actuallyProcessLocation: ' + type);
 
   let inputLocation = message.content.body;
 
@@ -205,21 +407,27 @@ function processLocation(session, message) {
     console.log('region: ' + region);
     console.log('country: ' + country);
 
-    // session.set('region', region);
-    // session.set('country', country);
-    //
-    // session.set('step', 'details');
+    if (type == 'trade') {
+      session.setWithDictionary({
+        'region': region,
+        'country': country,
+        'step': 'details'
+      });
 
-    session.setWithDictionary({
-      'region': region,
-      'country': country,
-      'step': 'details'
-    });
+      session.reply(SOFA.Message({
+        body: 'Please provide some details so your trader knows how to trade with you. (i.e. "Can we meet at Sydney Airport 5pm this Sunday? Please call me at 0433-000-111")'
+      }))
 
-    session.reply(SOFA.Message({
-      body: 'Please provide some details so your trader knows how to perform the trade. (i.e. "Can we meet at Sydney Airport 5pm this Sunday? Please call me at 0433-000-111")'
-    }))
+    } else if (type == 'listing') {
+      session.setWithDictionary({
+        'region': region,
+        'country': country,
+        'step': 'confirm_listing'
+      });
 
+      confirmListingDetails(session);
+
+    }
 
   } else {
     session.reply(SOFA.Message({
@@ -242,6 +450,38 @@ function processDetails(session, message) {
 
   confirmDetails(session);
 
+
+}
+
+function confirmListingDetails(session) {
+
+  console.log('confirm listing details');
+
+  let currency = session.get('currency');
+  let location = session.get('region') + ', ' + session.get('country');
+
+  let text = "Please confirm your listing details:\n\n" +
+    "Currency: " + currency + "\n" +
+    "Location: " + location + "\n";
+
+
+  let controls = [{
+      type: 'button',
+      label: 'Confirm',
+      value: 'confirmListingDetails'
+    },
+    {
+      type: 'button',
+      label: 'Start Over',
+      value: 'startOver'
+    }
+  ];
+
+  session.reply(SOFA.Message({
+    body: text,
+    controls: controls,
+    showKeyboard: false
+  }))
 
 }
 
@@ -282,30 +522,4 @@ function confirmDetails(session) {
     showKeyboard: false
   }))
 
-}
-
-
-
-
-
-
-function welcome(session) {
-
-  let controls = [{
-      type: 'button',
-      label: 'I want to get ETH with cash',
-      value: 'ethForCash'
-    },
-    {
-      type: 'button',
-      label: 'I want to get cash for my ETHs',
-      value: 'cashForEth'
-    }
-  ]
-
-  session.reply(SOFA.Message({
-    body: 'Hello there! Welcome to Eth2Cash. How can I help you today?',
-    controls: controls,
-    showKeyboard: false
-  }))
 }
