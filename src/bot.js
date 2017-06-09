@@ -61,8 +61,21 @@ function welcome(session) {
 function onMessage(session, message) {
 
   if (message.content.body.toLowerCase() == 'reset') {
-    session.reset();
-    welcome(session);
+
+    let tradeId = session.get('tradeId');
+
+    if (tradeId) {
+
+      abortTrade(session, function() {
+
+      });
+
+    } else {
+      session.reset();
+      welcome(session);
+    }
+
+
     return;
   }
 
